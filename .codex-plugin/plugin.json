@@ -1,0 +1,43 @@
+{
+  "name": "codex-provider-sync-skill",
+  "version": "0.2.0",
+  "description": "Agent skill package for safely inspecting, syncing, and restoring Codex provider/session visibility metadata after provider changes.",
+  "author": {
+    "name": "labixiaoxins",
+    "url": "https://github.com/labixiaoxins"
+  },
+  "homepage": "https://github.com/labixiaoxins/labixiaoxins-codex-provider-sync-skill",
+  "repository": "https://github.com/labixiaoxins/labixiaoxins-codex-provider-sync-skill",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "provider",
+    "sessions",
+    "sqlite",
+    "skill",
+    "cc-switch"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Provider Sync Skill",
+    "shortDescription": "Repair Codex session visibility after provider switches",
+    "longDescription": "A safety-first Codex/Claude Code Skill package for using codex-provider-sync. It guides agents through status-first inspection, backup-aware sync, verification, and restore for rollout and SQLite provider metadata after model_provider/API/provider changes.",
+    "developerName": "labixiaoxins",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/labixiaoxins/labixiaoxins-codex-provider-sync-skill",
+    "privacyPolicyURL": "https://github.com/labixiaoxins/labixiaoxins-codex-provider-sync-skill",
+    "termsOfServiceURL": "https://github.com/labixiaoxins/labixiaoxins-codex-provider-sync-skill/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Use codex-provider-sync to inspect my Codex provider metadata",
+      "Use codex-provider-sync to repair old Codex sessions after switching provider",
+      "Use codex-provider-sync to explain whether I should run sync or restore"
+    ],
+    "brandColor": "#1D4ED8",
+    "screenshots": []
+  }
+}
