@@ -1,128 +1,177 @@
 # codex-provider-sync-skill
 
-面向 Codex / Claude Code 的本地 Skill 包，用来调用 [`Dailin521/codex-provider-sync`](https://github.com/Dailin521/codex-provider-sync)，修复 Codex 在切换 `model_provider` / API / Provider 之后，历史会话在 Desktop、`/resume` 或项目侧列表里不可见的问题。
+Codex / Claude Code Skill package for safely using [`Dailin521/codex-provider-sync`](https://github.com/Dailin521/codex-provider-sync) after Codex provider/API switches.
 
-## 解决的问题
+It gives AI agents a small, backup-aware runbook for restoring historical Codex session visibility when sessions still exist locally but disappear from Codex Desktop, `/resume`, or project history after `model_provider` changes.
 
-Codex 的 provider 配置、rollout 会话 metadata、SQLite thread metadata、项目路径缓存可能不是同一个状态源。用 CC Switch 或其他工具切换 Provider 后，经常会出现：
+## What It Solves
 
-- 旧会话还在本地，但 Codex Desktop 看不到。
-- `/resume` 里缺少旧会话。
-- 项目侧历史会话为空或数量不对。
-- 会话 provider metadata、SQLite rows、cwd path 不一致。
+Codex provider config, rollout metadata, SQLite thread metadata, and project path caches can drift after a provider/API switch. Common symptoms:
 
-这个 Skill 的作用是让 AI Agent 按安全流程调用 `codex-provider` CLI：先 `status`，再在必要时 `sync`，最后复查。
+- Old sessions exist on disk but do not appear in Codex Desktop.
+- `/resume` misses older conversations.
+- Project history is empty or incomplete.
+- Rollout provider metadata, SQLite rows, and cwd paths disagree.
 
-## 能力边界
+This package does not replace the upstream CLI. It wraps it with agent-facing instructions, install helpers, and a conservative workflow:
 
-会做：
+```text
+status -> sync only if needed -> status again -> restore if wrong
+```
 
-- 检查当前 Codex provider。
-- 检查 rollout files 与 SQLite metadata 是否对齐。
-- 修复历史会话 provider/session visibility metadata。
-- 修复 SQLite user-event flags 与 cwd paths。
-- 使用上游工具自动创建备份。
+## Boundaries
 
-不会做：
+This package can help with:
 
-- 不登录 GitHub / OpenAI / 第三方 API。
-- 不管理 `auth.json`。
-- 不复制 API key、provider token 或 OAuth 文件。
-- 不改写对话正文、标题或消息内容。
-- 不重新加密 `encrypted_content`。旧加密会话可能恢复“可见”，但跨 provider/account 继续对话仍可能失败。
+- Inspecting current Codex provider/session metadata alignment.
+- Repairing historical session visibility metadata.
+- Repairing SQLite user-event flags and cwd paths through the upstream CLI.
+- Keeping backup and restore steps visible to the agent.
 
-## 前置要求
+This package does not:
 
-- Windows 10/11 或可运行 Node.js 的环境。
-- Node.js `24+`，因为上游 CLI 使用 `node:sqlite`。
-- 已安装上游 CLI：
+- Log in to OpenAI, GitHub, or third-party providers.
+- Manage `auth.json`, API keys, provider tokens, or OAuth files.
+- Rewrite conversation content, titles, or message history.
+- Re-encrypt `encrypted_content`; old encrypted sessions may become visible but can still fail when continued under a different provider/account.
+
+## Requirements
+
+- Node.js `24+` because the upstream CLI uses `node:sqlite`.
+- `npm` available on PATH.
+- Codex local state under one of:
+  - `$env:CODEX_HOME`
+  - `%USERPROFILE%\.codex`
+  - an explicit `--codex-home <path>`
+
+The current package was validated against upstream `codex-provider-sync@0.2.5`.
+
+## Quick Install
+
+From this repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+The installer:
+
+- Checks Node.js major version.
+- Installs or updates the upstream `codex-provider` CLI.
+- Copies the Skill into your Codex skill directory.
+- Optionally copies it into shared agent / Claude Code skill directories when those directories exist.
+- Installs the Windows wrapper into `~/agent-tools`.
+
+Then verify:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\verify.ps1
+```
+
+## Manual Install
+
+Install the upstream CLI:
 
 ```powershell
 npm install -g git+https://github.com/Dailin521/codex-provider-sync.git
 ```
 
-## 安装 Skill
-
-把本仓库里的 Skill 复制到 Codex Skill 目录：
+Copy the Skill:
 
 ```powershell
-Copy-Item -Recurse -Force .\skills\codex-provider-sync C:\Users\Administrator\.codex\skills\codex-provider-sync
+$codexSkills = if ($env:CODEX_HOME) { Join-Path $env:CODEX_HOME 'skills' } else { Join-Path $env:USERPROFILE '.codex\skills' }
+New-Item -ItemType Directory -Force -Path $codexSkills | Out-Null
+Copy-Item -Recurse -Force .\skills\codex-provider-sync (Join-Path $codexSkills 'codex-provider-sync')
 ```
 
-可选：同步到 Claude Code / 共享 Skill 目录：
+Optional wrapper:
 
 ```powershell
-Copy-Item -Recurse -Force .\skills\codex-provider-sync C:\Users\Administrator\.agents\skills\codex-provider-sync
-Copy-Item -Recurse -Force .\skills\codex-provider-sync C:\Users\Administrator\.claude\skills\codex-provider-sync
+New-Item -ItemType Directory -Force -Path (Join-Path $env:USERPROFILE 'agent-tools') | Out-Null
+Copy-Item -Force .\agent-tools\codex-provider-sync.cmd (Join-Path $env:USERPROFILE 'agent-tools\codex-provider-sync.cmd')
 ```
 
-可选：安装 Windows wrapper：
+## Recommended Workflow
+
+Resolve Codex home:
 
 ```powershell
-Copy-Item -Force .\agent-tools\codex-provider-sync.cmd C:\Users\Administrator\agent-tools\codex-provider-sync.cmd
+$codexHome = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $env:USERPROFILE '.codex' }
 ```
 
-## 推荐使用流程
-
-先只读检查：
+Inspect first:
 
 ```powershell
-codex-provider status --codex-home C:\Users\Administrator\.codex
+codex-provider status --codex-home $codexHome
 ```
 
-如果当前 provider 是正确的，但报告显示 mixed providers、`user-event flags needing repair`、`cwd paths needing repair` 或项目可见性异常，再运行：
+Run sync only when the current provider is correct and the report shows mixed providers, user-event repairs, cwd repairs, or project visibility mismatch:
 
 ```powershell
-codex-provider sync --keep 5 --codex-home C:\Users\Administrator\.codex
+codex-provider sync --keep 5 --codex-home $codexHome
 ```
 
-最后复查：
+Verify:
 
 ```powershell
-codex-provider status --codex-home C:\Users\Administrator\.codex
+codex-provider status --codex-home $codexHome
 ```
 
-如果安装了 wrapper，也可以用：
+If the result is wrong, restore from the backup path printed by `sync`:
 
 ```powershell
-C:\Users\Administrator\agent-tools\codex-provider-sync.cmd status --codex-home C:\Users\Administrator\.codex
-C:\Users\Administrator\agent-tools\codex-provider-sync.cmd sync --keep 5 --codex-home C:\Users\Administrator\.codex
+codex-provider restore <backup-dir> --codex-home $codexHome
 ```
 
-## 和 codex-project-sync 的区别
+## When To Use `switch`
 
-`codex-provider-sync` 解决历史会话可见性：
+Prefer switching providers with your normal provider tool, then use this Skill for metadata repair.
 
-- rollout files
-- SQLite thread metadata
-- provider/session visibility
-- cwd repair
-
-`codex-project-sync` 解决项目列表恢复：
-
-- project roots
-- trust entries
-- labels
-- project order
-- active workspace roots
-
-切换 CC Switch Provider 后，推荐顺序是：
+Only use the upstream switch command when the user explicitly asks this tool to change Codex provider and the target provider is already declared in Codex config:
 
 ```powershell
-C:\Users\Administrator\agent-tools\sync-codex-projects.cmd sync
-C:\Users\Administrator\agent-tools\codex-provider-sync.cmd status --codex-home C:\Users\Administrator\.codex
+codex-provider switch <provider-id> --keep 5 --codex-home $codexHome
 ```
 
-只有 `status` 显示需要修复历史会话 metadata 时，再运行 provider sync。
+## With codex-project-sync
 
-## 安全建议
+Use the two tools for different state layers:
 
-- 每次写操作前先跑 `status`。
-- 不要手动编辑 `state_5.sqlite` 或 rollout jsonl，除非上游 CLI 无法处理。
-- 备份目录在 `C:\Users\Administrator\.codex\backups_state\provider-sync`。
-- 如果 SQLite 被占用，先关闭 Codex Desktop、Codex CLI、app-server，再重试。
-- 如果报告 locked rollout files，被跳过的活跃会话结束后再补跑一次。
+- `codex-project-sync`: project roots, trust entries, labels, project order, active workspace roots.
+- `codex-provider-sync`: rollout files, SQLite thread metadata, provider/session visibility, cwd repair.
 
-## 许可证
+After a CC Switch provider/API change, a conservative sequence is:
 
-本 Skill 包使用 MIT License。上游 CLI 请遵守 [`Dailin521/codex-provider-sync`](https://github.com/Dailin521/codex-provider-sync) 的许可证。
+```powershell
+sync-codex-projects.cmd sync
+codex-provider-sync.cmd status --codex-home $codexHome
+```
+
+Only run provider `sync` if `status` says metadata needs repair.
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| `node:sqlite` error | Install Node.js 24+. |
+| SQLite is locked | Close Codex Desktop, Codex CLI, and app-server, then retry. |
+| Locked rollout files skipped | Treat as partial success; rerun after the active session ends. |
+| `encrypted_content` warning | Visibility can be repaired, but continuing old encrypted sessions under another provider/account may fail. |
+| Desktop still misses old sessions | Check whether Codex Desktop is only loading the recent first page; use CLI `/resume` as a second signal. |
+| Wrong sync target | Use `codex-provider restore <backup-dir>`. |
+
+## Repository Layout
+
+```text
+.
+├── .codex-plugin/plugin.json
+├── agent-tools/codex-provider-sync.cmd
+├── memory-bank/
+├── scripts/install.ps1
+├── scripts/verify.ps1
+└── skills/codex-provider-sync/SKILL.md
+```
+
+## License
+
+This Skill package is MIT licensed. The upstream CLI is maintained separately at [`Dailin521/codex-provider-sync`](https://github.com/Dailin521/codex-provider-sync); follow its license and release notes.
