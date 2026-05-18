@@ -1,0 +1,3 @@
+display_name: Codex Provider Sync
+short_description: Repair Codex session visibility after provider switches.
+default_prompt: Use $codex-provider-sync to inspect my Codex provider metadata before deciding whether to sync.
